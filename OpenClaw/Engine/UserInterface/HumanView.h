@@ -50,6 +50,7 @@ public:
     void RegisterConsoleCommandHandler(void(*handler)(const char*, void*), void* userdata);
 
     shared_ptr<Console> GetConsole() const { return m_pConsole; }
+    bool IsIngameMenuVisible() const { return m_pIngameMenu && m_pIngameMenu->VIsVisible(); }
 
     void SetRendering(bool rendering) { m_bRendering = rendering; }
     bool IsRendering() { return m_bRendering; }

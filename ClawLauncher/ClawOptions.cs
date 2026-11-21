@@ -51,6 +51,9 @@ namespace ClawLauncher
             m_ClawConfig = ParseClawConfig(configPath);
 
             SetupControlsFromConfig(m_ClawConfig);
+
+            InitializeControlsTab();
+            LoadControlsFromConfig(configPath);
         }
 
         private void SaveOptionsToConfig()
@@ -62,6 +65,7 @@ namespace ClawLauncher
             Video_ApplyChangesButton_Click(o, e);
             Audio_ApplyChangesButton_Click(o, e);
             Assets_ApplyChangesButton_Click(o, e);
+            Controls_ApplyChangesButton_Click(o, e);
         }
 
         private ClawConfig ParseClawConfig(String configPath)

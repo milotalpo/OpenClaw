@@ -60,62 +60,34 @@ void ActorController::OnUpdate(uint32 msDiff)
 
     float climbY = 0.0f;
 
+    const ControlOptions* pControls = g_pApp->GetControlOptions();
+
     // We need two conditions because I want behaviour such as when both right and left
     // buttons are pressed, I dont want actor to move, e.g. to have the move effect nullyfied
-
-    if (g_pApp->GetControlOptions()->useAlternateControls)
+    if (IsKeyPressed(pControls->GetKey(InputAction_MoveRight)))
     {
-        if (m_InputKeys[SDLK_d])
-        {
-            moveX += m_Speed * (float)msDiff;
-        }
-        if (m_InputKeys[SDLK_a])
-        {
-            moveX -= m_Speed * (float)msDiff;
-        }
-
-        // CLimbing
-        if (m_InputKeys[SDLK_s])
-        {
-            climbY += 5.0;
-        }
-        if (m_InputKeys[SDLK_w])
-        {
-            climbY -= 5.0;
-        }
-
-        // Jumping
-        if (m_InputKeys[SDLK_SPACE] || m_InputKeys[SDLK_w])
-        {
-            moveY -= m_Speed * (float)msDiff;
-        }
+        moveX += m_Speed * (float)msDiff;
     }
-    else
+    if (IsKeyPressed(pControls->GetKey(InputAction_MoveLeft)))
     {
-        if (m_InputKeys[SDLK_RIGHT])
-        {
-            moveX += m_Speed * (float)msDiff;
-        }
-        if (m_InputKeys[SDLK_LEFT])
-        {
-            moveX -= m_Speed * (float)msDiff;
-        }
+        moveX -= m_Speed * (float)msDiff;
+    }
 
-        // CLimbing
-        if (m_InputKeys[SDLK_DOWN])
-        {
-            climbY += 5.0;
-        }
-        if (m_InputKeys[SDLK_UP])
-        {
-            climbY -= 5.0;
-        }
+    // Climbing
+    if (IsKeyPressed(pControls->GetKey(InputAction_Down)))
+    {
+        climbY += 5.0;
+    }
+    if (IsKeyPressed(pControls->GetKey(InputAction_Up)))
+    {
+        climbY -= 5.0;
+    }
 
-        // Jumping
-        if (m_InputKeys[SDLK_SPACE])
-        {
-            moveY -= m_Speed * (float)msDiff;
-        }
+    // Jumping (alternate controls: "up" key also jumps)
+    if (IsKeyPressed(pControls->GetKey(InputAction_Jump)) ||
+        (pControls->useAlternateControls && IsKeyPressed(pControls->GetKey(InputAction_Up))))
+    {
+        moveY -= m_Speed * (float)msDiff;
     }
 
     if (fabs(climbY) > FLT_EPSILON)
@@ -130,38 +102,30 @@ void ActorController::OnUpdate(uint32 msDiff)
     }
 }
 
+bool ActorController::IsKeyPressed(SDL_Keycode key)
+{
+    auto findIt = m_InputKeys.find(key);
+    return findIt != m_InputKeys.end() && findIt->second;
+}
+
 bool ActorController::VOnKeyDown(SDL_Keycode key)
 {
-    if (g_pApp->GetControlOptions()->useAlternateControls)
+    const ControlOptions* pControls = g_pApp->GetControlOptions();
+
+    if (key == pControls->GetKey(InputAction_Fire))
     {
-        if (key == SDLK_e)
-        {
-            HandleAction(ActionType_Change_Ammo_Type);
-            return true;
-        }
-        else if (SDL_GetScancodeFromKey(key) == SDL_SCANCODE_LSHIFT)
-        {
-            HandleAction(ActionType_Change_Ammo_Type);
-            return true;
-        }
+        HandleAction(ActionType_Fire);
+        return true;
     }
-    else
+    else if (key == pControls->GetKey(InputAction_Attack))
     {
-        if (SDL_GetScancodeFromKey(key) == SDL_SCANCODE_LALT)
-        {
-            HandleAction(ActionType_Fire);
-            return true;
-        }
-        else if (SDL_GetScancodeFromKey(key) == SDL_SCANCODE_LCTRL)
-        {
-            HandleAction(ActionType_Attack);
-            return true;
-        }
-        else if (SDL_GetScancodeFromKey(key) == SDL_SCANCODE_LSHIFT)
-        {
-            HandleAction(ActionType_Change_Ammo_Type);
-            return true;
-        }
+        HandleAction(ActionType_Attack);
+        return true;
+    }
+    else if (key == pControls->GetKey(InputAction_ChangeAmmo))
+    {
+        HandleAction(ActionType_Change_Ammo_Type);
+        return true;
     }
 
     m_InputKeys[key] = true;
@@ -171,19 +135,14 @@ bool ActorController::VOnKeyDown(SDL_Keycode key)
 
 bool ActorController::VOnKeyUp(SDL_Keycode key)
 {
-    if (g_pApp->GetControlOptions()->useAlternateControls)
-    {
+    const ControlOptions* pControls = g_pApp->GetControlOptions();
 
-    }
-    else
+    if (key == pControls->GetKey(InputAction_Fire))
     {
-        if (SDL_GetScancodeFromKey(key) == SDL_SCANCODE_LALT)
-        {
-            shared_ptr<EventData_Actor_Fire_Ended> pFireEndedEvent(new EventData_Actor_Fire_Ended(m_pControlledObject->VGetProperties()->GetActorId()));
-            IEventMgr::Get()->VTriggerEvent(pFireEndedEvent);
+        shared_ptr<EventData_Actor_Fire_Ended> pFireEndedEvent(new EventData_Actor_Fire_Ended(m_pControlledObject->VGetProperties()->GetActorId()));
+        IEventMgr::Get()->VTriggerEvent(pFireEndedEvent);
 
-            return true;
-        }
+        return true;
     }
 
     m_InputKeys[key] = false;
@@ -318,10 +277,10 @@ bool ActorController::OnTap(int id, const Touch_TapEvent &evt) {
             return true;
         }
         case WEAPON_TAP_RECOGNIZER:
-            key = SDLK_LSHIFT;
+            key = g_pApp->GetControlOptions()->GetKey(InputAction_ChangeAmmo);
             break;
         case ATTACK_TAP_RECOGNIZER:
-            key = SDLK_LCTRL;
+            key = g_pApp->GetControlOptions()->GetKey(InputAction_Attack);
             break;
         default:
             key = SDLK_UNKNOWN;
@@ -337,6 +296,7 @@ bool ActorController::OnTap(int id, const Touch_TapEvent &evt) {
 
 bool ActorController::OnJoystick(int id, const Touch_JoystickEvent &evt) {
     if (id == MOVEMENT_JOYSTICK_RECOGNIZER) {
+        const ControlOptions* pControls = g_pApp->GetControlOptions();
         const auto dx = evt.dx;
         const auto dy = evt.dy;
 
@@ -348,24 +308,25 @@ bool ActorController::OnJoystick(int id, const Touch_JoystickEvent &evt) {
 
             if (dx * 2 < dy && dx * 2 > -dy) {
                 // 247 - 292 deg
-                verticalKey = SDLK_DOWN;
+                verticalKey = pControls->GetKey(InputAction_Down);
             } else if (dx * 2 < -dy && dx * 2 > dy) {
                 // 67 deg - 112 deg
-                verticalKey = SDLK_UP;
+                verticalKey = pControls->GetKey(InputAction_Up);
             }
 
             if (dy < dx * 2 && dy > -dx * 2) {
                 // 292 - 67 deg
-                horizontalKey = SDLK_RIGHT;
+                horizontalKey = pControls->GetKey(InputAction_MoveRight);
             } else if (dy < -dx * 2 && dy > dx * 2) {
                 // 112 - 247 deg
-                horizontalKey = SDLK_LEFT;
+                horizontalKey = pControls->GetKey(InputAction_MoveLeft);
             }
         }
 
-        SDL_Keycode keys[] = {SDLK_LEFT, SDLK_UP, SDLK_RIGHT, SDLK_DOWN};
+        SDL_Keycode keys[] = {pControls->GetKey(InputAction_MoveLeft), pControls->GetKey(InputAction_Up),
+                              pControls->GetKey(InputAction_MoveRight), pControls->GetKey(InputAction_Down)};
         for (SDL_Keycode key : keys) {
-            bool isPressed = m_InputKeys[key];
+            bool isPressed = IsKeyPressed(key);
             bool press = key == horizontalKey || key == verticalKey;
             if (!isPressed && press) {
                 VOnKeyDown(key);
@@ -382,9 +343,9 @@ bool ActorController::OnJoystick(int id, const Touch_JoystickEvent &evt) {
 bool ActorController::OnSwipe(int id, const Touch_SwipeEvent &evt, bool start) {
     if (id == PROJECTILE_SWIPE_RECOGNIZER) {
         if (start) {
-            return VOnKeyDown(SDLK_LALT);
+            return VOnKeyDown(g_pApp->GetControlOptions()->GetKey(InputAction_Fire));
         } else {
-            return VOnKeyUp(SDLK_LALT);
+            return VOnKeyUp(g_pApp->GetControlOptions()->GetKey(InputAction_Fire));
         }
     }
     return false;
@@ -393,9 +354,9 @@ bool ActorController::OnSwipe(int id, const Touch_SwipeEvent &evt, bool start) {
 bool ActorController::OnPress(int id, const Touch_PressEvent &evt, bool start) {
     if (id == JUMP_PRESS_RECOGNIZER) {
         if (start) {
-            return VOnKeyDown(SDLK_SPACE);
+            return VOnKeyDown(g_pApp->GetControlOptions()->GetKey(InputAction_Jump));
         } else {
-            return VOnKeyUp(SDLK_SPACE);
+            return VOnKeyUp(g_pApp->GetControlOptions()->GetKey(InputAction_Jump));
         }
     }
     return false;

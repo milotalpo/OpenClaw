@@ -51,6 +51,8 @@ BaseGameApp::BaseGameApp()
     m_IsRunning = false;
     m_QuitRequested = false;
     m_IsQuitting = false;
+
+    memset(m_GamepadInputSources, 0, sizeof(m_GamepadInputSources));
 }
 
 bool BaseGameApp::Initialize(int argc, char** argv)
@@ -66,6 +68,7 @@ bool BaseGameApp::Initialize(int argc, char** argv)
     if (!InitializeResources(m_GameOptions)) return false;
     if (!InitializeLocalization(m_GameOptions)) return false;
     if (!InitializeTouchManager(m_GameOptions)) return false;
+    InitializeGameControllers();
     if (!ReadActorXmlPrototypes(m_GameOptions)) return false;
     if (!ReadLevelMetadata(m_GameOptions)) return false;
 
@@ -102,6 +105,7 @@ void BaseGameApp::Terminate()
     RemoveAllDelegates();
 
     SAFE_DELETE(m_pGame);
+    CloseGameControllers();
     SDL_DestroyRenderer(m_pRenderer);
     SDL_DestroyWindow(m_pWindow);
     SAFE_DELETE(m_pAudio);
@@ -347,6 +351,15 @@ void BaseGameApp::OnEvent(SDL_Event& event)
                     (*iter)->VOnEvent(event);
                 }
             }
+            break;
+        }
+        case SDL_CONTROLLERDEVICEADDED:
+        case SDL_CONTROLLERDEVICEREMOVED:
+        case SDL_CONTROLLERBUTTONDOWN:
+        case SDL_CONTROLLERBUTTONUP:
+        case SDL_CONTROLLERAXISMOTION:
+        {
+            OnGameControllerEvent(event);
             break;
         }
         case SDL_FINGERUP:
@@ -697,6 +710,50 @@ bool BaseGameApp::LoadGameOptions(const char* inConfigFile)
     {
         ParseValueFromXmlElem(&m_ControlOptions.useAlternateControls,
                               pControlOptionsRootElem->FirstChildElement("UseAlternateControls"));
+
+        // Defaults depend on alternate controls, explicit bindings override them
+        m_ControlOptions.SetDefaultKeyBindings(m_ControlOptions.useAlternateControls);
+        if (TiXmlElement* pKeyBindingsElem = pControlOptionsRootElem->FirstChildElement("KeyBindings"))
+        {
+            // Pause is always bound to Escape on keyboard
+            for (int action = 0; action < InputAction_Pause; action++)
+            {
+                std::string keyName;
+                if (ParseValueFromXmlElem(&keyName, pKeyBindingsElem->FirstChildElement(InputActionToString((InputAction)action))))
+                {
+                    SDL_Keycode key = SDL_GetKeyFromName(keyName.c_str());
+                    if (key != SDLK_UNKNOWN)
+                    {
+                        m_ControlOptions.keyBindings[action] = key;
+                    }
+                    else
+                    {
+                        LOG_WARNING("Unknown key name in KeyBindings: \"" + keyName + "\"");
+                    }
+                }
+            }
+        }
+
+        if (TiXmlElement* pControllerElem = pControlOptionsRootElem->FirstChildElement("Controller"))
+        {
+            ParseValueFromXmlElem(&m_ControlOptions.controller.enable,
+                                  pControllerElem->FirstChildElement("Enable"));
+            ParseValueFromXmlElem(&m_ControlOptions.controller.stickDeadzone,
+                                  pControllerElem->FirstChildElement("StickDeadzone"));
+            ParseValueFromXmlElem(&m_ControlOptions.controller.triggerThreshold,
+                                  pControllerElem->FirstChildElement("TriggerThreshold"));
+            if (TiXmlElement* pBindingsElem = pControllerElem->FirstChildElement("Bindings"))
+            {
+                for (int action = 0; action < InputAction_Max; action++)
+                {
+                    std::string inputName;
+                    if (ParseValueFromXmlElem(&inputName, pBindingsElem->FirstChildElement(InputActionToString((InputAction)action))))
+                    {
+                        m_ControlOptions.controllerBindings[action] = StringToGamepadInput(inputName);
+                    }
+                }
+            }
+        }
         if (TiXmlElement* pTouchScreenOptionsRootElem = pControlOptionsRootElem->FirstChildElement("TouchScreen"))
         {
             ParseValueFromXmlElem(&m_ControlOptions.touchScreen.enable,
@@ -1538,4 +1595,338 @@ void BaseGameApp::RegisterTouchRecognizers(ITouchHandler &touchHandler) {
 
 std::shared_ptr<ResourceCache> BaseGameApp::GetResourceCache() const {
     return m_pResourceMgr->VGetResourceCacheFromName(ORIGINAL_RESOURCE);
+}
+
+//=====================================================================================================================
+// Input bindings - string conversions
+//=====================================================================================================================
+
+static const char* s_InputActionNames[InputAction_Max] =
+{
+    "MoveLeft", "MoveRight", "Up", "Down", "Jump", "Attack", "Fire", "ChangeAmmo", "Pause"
+};
+
+static const char* s_GamepadInputNames[GamepadInput_Max] =
+{
+    "a", "b", "x", "y", "back", "guide", "start", "leftstick", "rightstick",
+    "leftshoulder", "rightshoulder", "dpup", "dpdown", "dpleft", "dpright",
+    "lefttrigger", "righttrigger"
+};
+
+const char* InputActionToString(InputAction action)
+{
+    if (action < 0 || action >= InputAction_Max) return "";
+    return s_InputActionNames[action];
+}
+
+const char* GamepadInputToString(GamepadInput input)
+{
+    if (input < 0 || input >= GamepadInput_Max) return "none";
+    return s_GamepadInputNames[input];
+}
+
+GamepadInput StringToGamepadInput(const std::string& str)
+{
+    std::string lower = str;
+    std::transform(lower.begin(), lower.end(), lower.begin(), (int(*)(int)) std::tolower);
+    for (int i = 0; i < GamepadInput_Max; i++)
+    {
+        if (lower == s_GamepadInputNames[i])
+        {
+            return (GamepadInput)i;
+        }
+    }
+    return GamepadInput_None;
+}
+
+//=====================================================================================================================
+// Game controller support (Xbox / XInput compatible controllers via SDL GameController API)
+//
+// Controller inputs are translated into synthetic keyboard events:
+//  - During gameplay, each controller input triggers the keyboard key bound to the same action,
+//    so all keyboard-driven game logic works unchanged with a controller
+//  - In menus / score screens / ingame menu a fixed navigation layout is used:
+//    D-Pad or left stick = arrows, A = Enter, B / Back / Start = Escape
+//=====================================================================================================================
+
+static const uint8 GAMEPAD_SOURCE_BUTTON = 1 << 0;
+static const uint8 GAMEPAD_SOURCE_STICK = 1 << 1;
+static const uint8 GAMEPAD_SOURCE_TRIGGER = 1 << 2;
+
+void BaseGameApp::InitializeGameControllers()
+{
+    if (!m_ControlOptions.controller.enable)
+    {
+        LOG("Game controller support disabled in config.");
+        return;
+    }
+
+    if (SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER) != 0)
+    {
+        LOG_WARNING("Failed to initialize SDL game controller subsystem: " + std::string(SDL_GetError()));
+        return;
+    }
+
+    // Already connected controllers also generate SDL_CONTROLLERDEVICEADDED events,
+    // so opening them is handled in OnGameControllerEvent
+    LOG("Game controller subsystem initialized. Joysticks detected: " + ToStr(SDL_NumJoysticks()));
+}
+
+void BaseGameApp::CloseGameControllers()
+{
+    for (auto& controllerPair : m_GameControllers)
+    {
+        SDL_GameControllerClose(controllerPair.second);
+    }
+    m_GameControllers.clear();
+
+    if (SDL_WasInit(SDL_INIT_GAMECONTROLLER))
+    {
+        SDL_QuitSubSystem(SDL_INIT_GAMECONTROLLER);
+    }
+}
+
+void BaseGameApp::OnGameControllerEvent(SDL_Event& event)
+{
+    if (!m_ControlOptions.controller.enable)
+    {
+        return;
+    }
+
+    switch (event.type)
+    {
+        case SDL_CONTROLLERDEVICEADDED:
+        {
+            int deviceIndex = event.cdevice.which;
+            if (!SDL_IsGameController(deviceIndex))
+            {
+                break;
+            }
+
+            SDL_GameController* pController = SDL_GameControllerOpen(deviceIndex);
+            if (pController == NULL)
+            {
+                LOG_WARNING("Failed to open game controller: " + std::string(SDL_GetError()));
+                break;
+            }
+
+            SDL_JoystickID instanceId = SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pController));
+            if (m_GameControllers.find(instanceId) != m_GameControllers.end())
+            {
+                // Already opened - drop the extra reference
+                SDL_GameControllerClose(pController);
+                break;
+            }
+
+            m_GameControllers[instanceId] = pController;
+            const char* name = SDL_GameControllerName(pController);
+            LOG("Game controller connected: " + std::string(name ? name : "Unknown"));
+            break;
+        }
+
+        case SDL_CONTROLLERDEVICEREMOVED:
+        {
+            auto findIt = m_GameControllers.find(event.cdevice.which);
+            if (findIt != m_GameControllers.end())
+            {
+                SDL_GameControllerClose(findIt->second);
+                m_GameControllers.erase(findIt);
+                LOG("Game controller disconnected");
+            }
+
+            // Make sure no key stays stuck
+            ReleaseAllGamepadInputs();
+            break;
+        }
+
+        case SDL_CONTROLLERBUTTONDOWN:
+        case SDL_CONTROLLERBUTTONUP:
+        {
+            int button = event.cbutton.button;
+            if (button >= 0 && button <= GamepadInput_DPadRight)
+            {
+                SetGamepadInputSource((GamepadInput)button, GAMEPAD_SOURCE_BUTTON,
+                    event.type == SDL_CONTROLLERBUTTONDOWN);
+            }
+            break;
+        }
+
+        case SDL_CONTROLLERAXISMOTION:
+        {
+            int value = event.caxis.value;
+            int deadzone = m_ControlOptions.controller.stickDeadzone;
+            int triggerThreshold = m_ControlOptions.controller.triggerThreshold;
+
+            switch (event.caxis.axis)
+            {
+                // Left stick behaves like the D-Pad
+                case SDL_CONTROLLER_AXIS_LEFTX:
+                    SetGamepadInputSource(GamepadInput_DPadLeft, GAMEPAD_SOURCE_STICK, value < -deadzone);
+                    SetGamepadInputSource(GamepadInput_DPadRight, GAMEPAD_SOURCE_STICK, value > deadzone);
+                    break;
+                case SDL_CONTROLLER_AXIS_LEFTY:
+                    SetGamepadInputSource(GamepadInput_DPadUp, GAMEPAD_SOURCE_STICK, value < -deadzone);
+                    SetGamepadInputSource(GamepadInput_DPadDown, GAMEPAD_SOURCE_STICK, value > deadzone);
+                    break;
+                case SDL_CONTROLLER_AXIS_TRIGGERLEFT:
+                    SetGamepadInputSource(GamepadInput_LeftTrigger, GAMEPAD_SOURCE_TRIGGER, value > triggerThreshold);
+                    break;
+                case SDL_CONTROLLER_AXIS_TRIGGERRIGHT:
+                    SetGamepadInputSource(GamepadInput_RightTrigger, GAMEPAD_SOURCE_TRIGGER, value > triggerThreshold);
+                    break;
+                default:
+                    break;
+            }
+            break;
+        }
+    }
+}
+
+void BaseGameApp::SetGamepadInputSource(GamepadInput input, uint8 sourceMask, bool pressed)
+{
+    if (input < 0 || input >= GamepadInput_Max)
+    {
+        return;
+    }
+
+    uint8 oldState = m_GamepadInputSources[input];
+    uint8 newState = pressed ? (uint8)(oldState | sourceMask) : (uint8)(oldState & ~sourceMask);
+    m_GamepadInputSources[input] = newState;
+
+    bool wasPressed = oldState != 0;
+    bool isPressed = newState != 0;
+    if (wasPressed != isPressed)
+    {
+        OnGamepadInputChanged(input, isPressed);
+    }
+}
+
+bool BaseGameApp::IsGameplayInputActive()
+{
+    if (m_pGame == NULL || m_pGame->GetGameState() != GameState_IngameRunning)
+    {
+        return false;
+    }
+
+    HumanView* pHumanView = GetHumanView();
+    if (pHumanView == NULL)
+    {
+        return false;
+    }
+
+    if (pHumanView->GetConsole() && pHumanView->GetConsole()->IsActive())
+    {
+        return false;
+    }
+
+    return !pHumanView->IsIngameMenuVisible();
+}
+
+void BaseGameApp::OnGamepadInputChanged(GamepadInput input, bool pressed)
+{
+    if (pressed)
+    {
+        std::vector<SDL_Keycode> keys;
+
+        if (IsGameplayInputActive())
+        {
+            for (int action = 0; action < InputAction_Max; action++)
+            {
+                if (m_ControlOptions.controllerBindings[action] == input)
+                {
+                    SDL_Keycode key = (action == InputAction_Pause) ?
+                        SDLK_ESCAPE : m_ControlOptions.keyBindings[action];
+                    if (key != SDLK_UNKNOWN)
+                    {
+                        keys.push_back(key);
+                    }
+                }
+            }
+        }
+        else
+        {
+            // Menu navigation
+            switch (input)
+            {
+                case GamepadInput_DPadUp:    keys.push_back(SDLK_UP); break;
+                case GamepadInput_DPadDown:  keys.push_back(SDLK_DOWN); break;
+                case GamepadInput_DPadLeft:  keys.push_back(SDLK_LEFT); break;
+                case GamepadInput_DPadRight: keys.push_back(SDLK_RIGHT); break;
+                case GamepadInput_A:         keys.push_back(SDLK_RETURN); break;
+                case GamepadInput_B:
+                case GamepadInput_Back:
+                case GamepadInput_Start:     keys.push_back(SDLK_ESCAPE); break;
+                default: break;
+            }
+        }
+
+        // Remember what was pressed so that release sends the same keys
+        // even if the game state changed in between (e.g. menu opened)
+        m_GamepadHeldKeys[input] = keys;
+        for (SDL_Keycode key : keys)
+        {
+            SendSyntheticKey(key, true);
+        }
+    }
+    else
+    {
+        std::vector<SDL_Keycode> keys = m_GamepadHeldKeys[input];
+        m_GamepadHeldKeys[input].clear();
+        for (SDL_Keycode key : keys)
+        {
+            SendSyntheticKey(key, false);
+        }
+    }
+}
+
+void BaseGameApp::SendSyntheticKey(SDL_Keycode key, bool pressed)
+{
+    // Reference counted so that e.g. D-Pad and left stick held together act as one key
+    int& refCount = m_SyntheticKeyRefCount[key];
+    if (pressed)
+    {
+        refCount++;
+        if (refCount != 1)
+        {
+            return;
+        }
+    }
+    else
+    {
+        if (refCount <= 0)
+        {
+            refCount = 0;
+            return;
+        }
+        refCount--;
+        if (refCount != 0)
+        {
+            return;
+        }
+    }
+
+    SDL_Event keyEvent;
+    SDL_zero(keyEvent);
+    keyEvent.type = pressed ? SDL_KEYDOWN : SDL_KEYUP;
+    keyEvent.key.timestamp = SDL_GetTicks();
+    keyEvent.key.windowID = m_pWindow ? SDL_GetWindowID(m_pWindow) : 0;
+    keyEvent.key.state = pressed ? SDL_PRESSED : SDL_RELEASED;
+    keyEvent.key.repeat = 0;
+    keyEvent.key.keysym.sym = key;
+    keyEvent.key.keysym.scancode = SDL_GetScancodeFromKey(key);
+    keyEvent.key.keysym.mod = KMOD_NONE;
+
+    OnEvent(keyEvent);
+}
+
+void BaseGameApp::ReleaseAllGamepadInputs()
+{
+    for (int input = 0; input < GamepadInput_Max; input++)
+    {
+        if (m_GamepadInputSources[input] != 0)
+        {
+            m_GamepadInputSources[input] = 0;
+            OnGamepadInputChanged((GamepadInput)input, false);
+        }
+    }
 }
