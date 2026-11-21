@@ -170,6 +170,49 @@ struct GlobalOptions
     bool showPosition;
 };
 
+// Remappable player actions (keyboard + game controller)
+enum InputAction
+{
+    InputAction_MoveLeft = 0,
+    InputAction_MoveRight,
+    InputAction_Up,         // Climb up / look up
+    InputAction_Down,       // Climb down / duck / look down
+    InputAction_Jump,
+    InputAction_Attack,
+    InputAction_Fire,       // Pistol / magic / dynamite
+    InputAction_ChangeAmmo,
+    InputAction_Pause,      // Keyboard: always Escape
+    InputAction_Max
+};
+
+// Virtual game controller inputs. First 15 values match SDL_GameControllerButton.
+enum GamepadInput
+{
+    GamepadInput_None = -1,
+    GamepadInput_A = 0,
+    GamepadInput_B,
+    GamepadInput_X,
+    GamepadInput_Y,
+    GamepadInput_Back,
+    GamepadInput_Guide,
+    GamepadInput_Start,
+    GamepadInput_LeftStick,
+    GamepadInput_RightStick,
+    GamepadInput_LeftShoulder,
+    GamepadInput_RightShoulder,
+    GamepadInput_DPadUp,
+    GamepadInput_DPadDown,
+    GamepadInput_DPadLeft,
+    GamepadInput_DPadRight,
+    GamepadInput_LeftTrigger,
+    GamepadInput_RightTrigger,
+    GamepadInput_Max
+};
+
+const char* InputActionToString(InputAction action);
+const char* GamepadInputToString(GamepadInput input);
+GamepadInput StringToGamepadInput(const std::string& str);
+
 struct ControlOptions
 {
     ControlOptions() {
@@ -177,8 +220,53 @@ struct ControlOptions
         touchScreen.enable = false;
         touchScreen.distanceThreshold = 0.1;
         touchScreen.timeThreshold = 100;
+
+        SetDefaultKeyBindings(false);
+        SetDefaultControllerBindings();
+        controller.enable = true;
+        controller.stickDeadzone = 16000;
+        controller.triggerThreshold = 8000;
     }
+
+    void SetDefaultKeyBindings(bool alternate)
+    {
+        keyBindings[InputAction_MoveLeft]   = alternate ? SDLK_a : SDLK_LEFT;
+        keyBindings[InputAction_MoveRight]  = alternate ? SDLK_d : SDLK_RIGHT;
+        keyBindings[InputAction_Up]         = alternate ? SDLK_w : SDLK_UP;
+        keyBindings[InputAction_Down]       = alternate ? SDLK_s : SDLK_DOWN;
+        keyBindings[InputAction_Jump]       = SDLK_SPACE;
+        keyBindings[InputAction_Attack]     = SDLK_LCTRL;
+        keyBindings[InputAction_Fire]       = SDLK_LALT;
+        keyBindings[InputAction_ChangeAmmo] = alternate ? SDLK_e : SDLK_LSHIFT;
+        keyBindings[InputAction_Pause]      = SDLK_ESCAPE;
+    }
+
+    void SetDefaultControllerBindings()
+    {
+        controllerBindings[InputAction_MoveLeft]   = GamepadInput_DPadLeft;
+        controllerBindings[InputAction_MoveRight]  = GamepadInput_DPadRight;
+        controllerBindings[InputAction_Up]         = GamepadInput_DPadUp;
+        controllerBindings[InputAction_Down]       = GamepadInput_DPadDown;
+        controllerBindings[InputAction_Jump]       = GamepadInput_A;
+        controllerBindings[InputAction_Attack]     = GamepadInput_X;
+        controllerBindings[InputAction_Fire]       = GamepadInput_B;
+        controllerBindings[InputAction_ChangeAmmo] = GamepadInput_Y;
+        controllerBindings[InputAction_Pause]      = GamepadInput_Start;
+    }
+
+    SDL_Keycode GetKey(InputAction action) const { return keyBindings[action]; }
+
     bool useAlternateControls;
+
+    SDL_Keycode keyBindings[InputAction_Max];
+    GamepadInput controllerBindings[InputAction_Max];
+
+    struct {
+        bool enable;
+        int stickDeadzone;      // 0..32767, left stick acts as D-Pad above this value
+        int triggerThreshold;   // 0..32767, trigger counts as pressed above this value
+    } controller;
+
     struct {
         bool enable;
         float distanceThreshold;
@@ -342,6 +430,21 @@ private:
     void QuitGameDelegate(IEventDataPtr pEventData);
 
     TiXmlDocument CreateAndReturnDefaultConfig(const char* inConfigFile);
+
+    // Game controller (Xbox / XInput compatible) support
+    void InitializeGameControllers();
+    void CloseGameControllers();
+    void OnGameControllerEvent(SDL_Event& event);
+    void SetGamepadInputSource(GamepadInput input, uint8 sourceMask, bool pressed);
+    void OnGamepadInputChanged(GamepadInput input, bool pressed);
+    bool IsGameplayInputActive();
+    void SendSyntheticKey(SDL_Keycode key, bool pressed);
+    void ReleaseAllGamepadInputs();
+
+    std::map<SDL_JoystickID, SDL_GameController*> m_GameControllers;
+    uint8 m_GamepadInputSources[GamepadInput_Max];
+    std::vector<SDL_Keycode> m_GamepadHeldKeys[GamepadInput_Max];
+    std::map<SDL_Keycode, int> m_SyntheticKeyRefCount;
 
     SDL_Window* m_pWindow;
     SDL_Renderer* m_pRenderer;

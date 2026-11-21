@@ -53,6 +53,9 @@
     <Compile Include="ClawOptions.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="ClawOptionsControls.cs">
+      <DependentUpon>ClawOptions.cs</DependentUpon>
+    </Compile>
     <Compile Include="ClawOptions.Designer.cs">
       <DependentUpon>ClawOptions.cs</DependentUpon>
     </Compile>

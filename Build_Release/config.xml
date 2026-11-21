@@ -22,11 +22,13 @@
     <ConsoleFont font="clacon.ttf" size="20" />
   </Font>
   <Assets>
-    <AssetsFolder></AssetsFolder>
+    <AssetsFolder>
+    </AssetsFolder>
     <RezArchive>CLAW.REZ</RezArchive>
     <CustomArchive>ASSETS.ZIP</CustomArchive>
     <ResourceCacheSize>150</ResourceCacheSize>
-    <TempDir></TempDir>
+    <TempDir>
+    </TempDir>
     <SavesFile>SAVES.XML</SavesFile>
   </Assets>
   <Console>
@@ -65,6 +67,36 @@
   </GlobalOptions>
   <ControlOptions>
     <UseAlternateControls>false</UseAlternateControls>
+    <!-- Keyboard bindings: SDL key names (Left, Right, Space, Left Ctrl, Left Alt, Left Shift, A..Z, ...) -->
+    <!-- Pause is always Escape on keyboard -->
+    <KeyBindings>
+      <MoveLeft>Left</MoveLeft>
+      <MoveRight>Right</MoveRight>
+      <Up>Up</Up>
+      <Down>Down</Down>
+      <Jump>Space</Jump>
+      <Attack>Left Ctrl</Attack>
+      <Fire>Left Alt</Fire>
+      <ChangeAmmo>Left Shift</ChangeAmmo>
+    </KeyBindings>
+    <!-- Xbox / XInput compatible game controller. Left stick always acts as the D-Pad -->
+    <!-- Inputs: a b x y leftshoulder rightshoulder lefttrigger righttrigger dpup dpdown dpleft dpright start back leftstick rightstick guide none -->
+    <Controller>
+      <Enable>true</Enable>
+      <StickDeadzone>16056</StickDeadzone>
+      <TriggerThreshold>8000</TriggerThreshold>
+      <Bindings>
+        <MoveLeft>dpleft</MoveLeft>
+        <MoveRight>dpright</MoveRight>
+        <Up>dpup</Up>
+        <Down>dpdown</Down>
+        <Jump>a</Jump>
+        <Attack>x</Attack>
+        <Fire>b</Fire>
+        <ChangeAmmo>y</ChangeAmmo>
+        <Pause>start</Pause>
+      </Bindings>
+    </Controller>
     <TouchScreen>
       <Enable>true</Enable>
       <!-- Distance to make a decision (separate tap/press and move events) -->

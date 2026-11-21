@@ -26,6 +26,7 @@ public:
     bool VOnTouch(const Touch_Event &evt) override;
 
 private:
+    bool IsKeyPressed(SDL_Keycode key);
     bool OnTap(int id, const Touch_TapEvent &evt);
     bool OnJoystick(int id, const Touch_JoystickEvent &evt);
     bool OnSwipe(int id, const Touch_SwipeEvent &evt, bool start);
