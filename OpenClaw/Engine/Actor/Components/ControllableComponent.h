@@ -35,6 +35,8 @@ public:
     virtual void VOnRun() = 0;
     virtual void VOnClimb(bool bIsClimbingUp, bool bIsOnTopEdge) = 0;
     virtual void VOnStopClimbing() = 0;
+    // Called when the actor lets go of the ladder (reached its end or the ground)
+    virtual void VOnDetachedFromLadder() = 0;
     virtual void OnAttack() = 0;
     virtual void OnFire(bool outOfAmmo = false) = 0;
     virtual void OnFireEnded() = 0;
@@ -134,6 +136,7 @@ public:
     virtual void VOnRun() override;
     virtual void VOnClimb(bool bIsClimbingUp, bool bIsOnTopEdge) override;
     virtual void VOnStopClimbing() override;
+    virtual void VOnDetachedFromLadder() override;
     virtual void OnAttack() override;
     virtual void OnFire(bool outOfAmmo = false) override;
     virtual void OnFireEnded() override;

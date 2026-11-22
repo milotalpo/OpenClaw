@@ -350,40 +350,39 @@ void PhysicsContactListener::BeginContact(b2Contact* pContact)
                 if (pContact->IsEnabled() /*!pFixtureA->IsSensor()*/ && !pFixtureB->IsSensor() && 
                     pFixtureA->GetBody()->GetType() == b2_staticBody && pFixtureA->GetBody()->GetUserData())
                 {
-                    Actor* pActor = static_cast<Actor*>(pFixtureA->GetBody()->GetUserData());
-                    assert(pActor);
+                    // pGroundActor is the static body's actor (fixture A), pActor the dynamic one (fixture B)
+                    assert(pGroundActor);
 
-                    bool bIsClaw = MakeStrongPtr(static_cast<Actor*>(pFixtureB->GetBody()->GetUserData())->GetComponent<ClawControllableComponent>()) != nullptr;
+                    // Dynamic bodies without an owning actor cannot be Claw
+                    bool bIsClaw = pActor != NULL &&
+                        MakeStrongPtr(pActor->GetComponent<ClawControllableComponent>()) != nullptr;
 
                     shared_ptr<CrumblingPegAIComponent> pCrumblingPegComponent =
-                        MakeStrongPtr(pActor->GetComponent<CrumblingPegAIComponent>(CrumblingPegAIComponent::g_Name));
+                        MakeStrongPtr(pGroundActor->GetComponent<CrumblingPegAIComponent>(CrumblingPegAIComponent::g_Name));
                     if (pCrumblingPegComponent && bIsClaw)
                     {
                         pCrumblingPegComponent->OnContact(pFixtureB->GetBody());
                     }
 
                     shared_ptr<SteppingGroundComponent> pSteppingGroundComponent =
-                        MakeStrongPtr(pActor->GetComponent<SteppingGroundComponent>());
+                        MakeStrongPtr(pGroundActor->GetComponent<SteppingGroundComponent>());
                     if (pSteppingGroundComponent && bIsClaw)
                     {
-                        Actor* pOtherActor = static_cast<Actor*>(pFixtureB->GetBody()->GetUserData());
-                        pSteppingGroundComponent->OnActorContact(pOtherActor);
+                        pSteppingGroundComponent->OnActorContact(pActor);
                     }
 
                     shared_ptr<SpringBoardComponent> pSpringBoardComponent =
-                        MakeStrongPtr(pActor->GetComponent<SpringBoardComponent>());
+                        MakeStrongPtr(pGroundActor->GetComponent<SpringBoardComponent>());
                     if (pSpringBoardComponent && bIsClaw)
                     {
-                        Actor* pOtherActor = static_cast<Actor*>(pFixtureB->GetBody()->GetUserData());
-                        pSpringBoardComponent->OnActorBeginContact(pOtherActor);
+                        pSpringBoardComponent->OnActorBeginContact(pActor);
                     }
 
                     shared_ptr<ConveyorBeltComponent> pConveyorBeltComponent =
-                        MakeStrongPtr(pActor->GetComponent<ConveyorBeltComponent>());
+                        MakeStrongPtr(pGroundActor->GetComponent<ConveyorBeltComponent>());
                     if (pConveyorBeltComponent && bIsClaw)
                     {
-                        Actor* pOtherActor = static_cast<Actor*>(pFixtureB->GetBody()->GetUserData());
-                        pConveyorBeltComponent->OnActorBeginContact(pOtherActor);
+                        pConveyorBeltComponent->OnActorBeginContact(pActor);
                     }
                 }
 
@@ -639,6 +638,14 @@ void PhysicsContactListener::EndContact(b2Contact* pContact)
                     if (pContact->IsEnabled() || pPhysicsComponent->GetTopLadderContact() == pContact)
                     {
                         pPhysicsComponent->RemoveOverlappingGround(pFixtureA);
+                    }
+
+                    // Box2D destroys (and later recycles) the contact once the fixtures stop overlapping.
+                    // Keeping the pointer around would make the ladder code disable some unrelated contact
+                    // and would also break the "is standing on top of the ladder" check.
+                    if (pPhysicsComponent->GetTopLadderContact() == pContact)
+                    {
+                        pPhysicsComponent->SetTopLadderContact(NULL);
                     }
 
                     Actor* pGroundActor = static_cast<Actor*>(pFixtureA->GetBody()->GetUserData());

@@ -491,8 +491,28 @@ void PhysicsComponent::VUpdate(uint32 msDiff)
         }
         if (m_OverlappingLaddersList.empty())
         {
-            m_IsClimbing = false;
-            m_pPhysics->VSetGravityScale(m_pOwner->GetGUID(), m_GravityScale);
+            DetachFromLadder();
+        }
+        else if (m_ClimbingSpeed.y > DBL_EPSILON &&
+                 IsOnGround() &&
+                 m_pTopLadderContact == NULL &&
+                 GetVelocity().y < 0.1)
+        {
+            // Climbing down and the ground stopped us - we are at the bottom of the ladder.
+            // Let go of the ladder, otherwise Claw would stay stuck in climbing state on the
+            // ground, unable to walk, attack or shoot
+            m_IsFalling = false;
+            m_IsJumping = false;
+            DetachFromLadder();
+
+            SetVelocity(Point(0, 0));
+            m_CurrentSpeed = Point(0, 0);
+            m_ClimbingSpeed = Point(0, 0);
+
+            m_pControllableComponent->SetDuckingTime(0);
+            m_pControllableComponent->SetLookingUpTime(0);
+
+            return;
         }
         else
         {
@@ -1026,6 +1046,20 @@ bool PhysicsComponent::AttachToLadder()
     }
 
     return false;
+}
+
+void PhysicsComponent::DetachFromLadder()
+{
+    m_IsClimbing = false;
+    m_HeightInAir = 0;
+    // Moving down the ladder is not falling, do not let it count as fall height
+    m_FallHeight = 0;
+    m_pPhysics->VSetGravityScale(m_pOwner->GetGUID(), m_GravityScale);
+
+    if (m_pControllableComponent)
+    {
+        m_pControllableComponent->VOnDetachedFromLadder();
+    }
 }
 
 void PhysicsComponent::RequestClimb(Point climbMovement)

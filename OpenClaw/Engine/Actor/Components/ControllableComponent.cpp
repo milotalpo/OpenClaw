@@ -505,6 +505,16 @@ void ClawControllableComponent::VOnStopClimbing()
     m_pClawAnimationComponent->PauseAnimation();
 }
 
+void ClawControllableComponent::VOnDetachedFromLadder()
+{
+    // Without this Claw would stay in climbing state after leaving the ladder, which blocks
+    // attacking / shooting and leaves him with a (possibly paused) climbing animation
+    if (m_State == ClawState_Climbing)
+    {
+        SetCurrentPhysicsState();
+    }
+}
+
 void ClawControllableComponent::OnAttack()
 {
     if (IsAttackingOrShooting() ||

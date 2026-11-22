@@ -87,6 +87,7 @@ public:
     void SetForceFall();
 
     bool AttachToLadder();
+    void DetachFromLadder();
 
     bool CheckOverlap(FixtureType withWhatFixture);
 
