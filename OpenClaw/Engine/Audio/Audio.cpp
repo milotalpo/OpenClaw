@@ -27,6 +27,8 @@ const uint32_t MIDI_RPC_MAX_HANDSHAKE_TRIES = 250;
 
 Audio::Audio()
     :
+    m_hMidiRpcServerProcess(NULL),
+    m_hMidiRpcServerJob(NULL),
     m_bIsServerInitialized(false),
     m_bIsClientInitialized(false),
     m_bIsMidiRpcInitialized(false),
@@ -149,7 +151,7 @@ static int SetupPlayMusicThread(void* pData)
             MidiRPC_ChangeVolume(pMusicInfo->musicVolume);
         }
     }
-        RpcExcept(1)
+        RpcExcept(RpcExceptionFilter(RpcExceptionCode()))
     {
         //__LOG_ERROR("Audio::SetMusicVolume: Failed due to RPC exception");
     }
@@ -193,7 +195,7 @@ void Audio::PauseMusic()
     {
         MidiRPC_PauseSong();
     }
-        RpcExcept(1)
+        RpcExcept(RpcExceptionFilter(RpcExceptionCode()))
     {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Audio::PauseMusic: Failed due to RPC exception");
     }
@@ -211,7 +213,7 @@ void Audio::ResumeMusic()
         MidiRPC_ResumeSong();
         MidiRPC_ChangeVolume(m_MusicVolume);
     }
-        RpcExcept(1)
+        RpcExcept(RpcExceptionFilter(RpcExceptionCode()))
     {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Audio::ResumeMusic: Failed due to RPC exception");
     }
@@ -228,7 +230,7 @@ void Audio::StopMusic()
     {
         MidiRPC_StopSong();
     }
-        RpcExcept(1)
+        RpcExcept(RpcExceptionFilter(RpcExceptionCode()))
     {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "AudioMgr::StopMusic: Failed due to RPC exception");
     }
@@ -253,7 +255,7 @@ void Audio::SetMusicVolume(int volumePercentage)
     {
         MidiRPC_ChangeVolume(m_MusicVolume);
     }
-        RpcExcept(1)
+        RpcExcept(RpcExceptionFilter(RpcExceptionCode()))
     {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "AudioMgr::SetMusicVolume: Failed due to RPC exception");
     }
@@ -422,21 +424,53 @@ bool Audio::InitializeMidiRPC(const std::string& midiRpcServerPath)
 bool Audio::InitializeMidiRPCServer(const std::string& midiRpcServerPath)
 {
     STARTUPINFO si = { sizeof(si) };
-    PROCESS_INFORMATION pi;
+    PROCESS_INFORMATION pi = {};
 
-    BOOL doneCreateProc = CreateProcess(midiRpcServerPath.c_str(), NULL, NULL, NULL, FALSE,
-                                           0, NULL, NULL, &si, &pi);
-    if (doneCreateProc)
+    // The MIDI server blocks in RpcServerListen() until it is explicitly told to stop. If this process
+    // ends without doing so (crash, closed console window, exit() during startup...) the server would
+    // be left running forever. Put it into a job object which kills it when the last handle to the job
+    // - owned by this process - is closed, no matter how this process terminates.
+    HANDLE hJob = CreateJobObject(NULL, NULL);
+    if (hJob != NULL)
     {
-        m_bIsServerInitialized = true;
-        LOG("MIDI RPC Server started. [" + std::string(midiRpcServerPath) + "]");
+        JOBOBJECT_EXTENDED_LIMIT_INFORMATION jobLimits = {};
+        jobLimits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        if (!SetInformationJobObject(hJob, JobObjectExtendedLimitInformation, &jobLimits, sizeof(jobLimits)))
+        {
+            CloseHandle(hJob);
+            hJob = NULL;
+        }
     }
-    else
+
+    // Start suspended so that the server cannot run (and spawn anything) before it is in the job
+    BOOL doneCreateProc = CreateProcess(midiRpcServerPath.c_str(), NULL, NULL, NULL, FALSE,
+                                        CREATE_SUSPENDED, NULL, NULL, &si, &pi);
+    if (!doneCreateProc)
     {
         LOG_ERROR("FAILED to start RPC MIDI Server. [" + std::string(midiRpcServerPath) + "]");
+        if (hJob != NULL)
+        {
+            CloseHandle(hJob);
+        }
+        return false;
     }
 
-    return (doneCreateProc != 0);
+    if (hJob != NULL && !AssignProcessToJobObject(hJob, pi.hProcess))
+    {
+        LOG_WARNING("Could not assign MIDI RPC Server to a job object. It may outlive the game if it crashes.");
+        CloseHandle(hJob);
+        hJob = NULL;
+    }
+
+    ResumeThread(pi.hThread);
+    CloseHandle(pi.hThread);
+
+    m_hMidiRpcServerProcess = pi.hProcess;
+    m_hMidiRpcServerJob = hJob;
+    m_bIsServerInitialized = true;
+    LOG("MIDI RPC Server started. [" + std::string(midiRpcServerPath) + "]");
+
+    return true;
 }
 
 bool Audio::InitializeMidiRPCClient()
@@ -510,14 +544,62 @@ bool Audio::IsRPCServerListening()
 
 void Audio::TerminateMidiRPC()
 {
-    RpcTryExcept
+    if (!m_bIsServerInitialized)
     {
-        MidiRPC_StopServer();
+        return;
     }
-    RpcExcept(1)
+
+    if (m_bIsClientInitialized)
     {
-        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Audio::TerminateMidiRPC: Failed due to RPC exception");
+        RpcTryExcept
+        {
+            MidiRPC_StopServer();
+        }
+        RpcExcept(RpcExceptionFilter(RpcExceptionCode()))
+        {
+            SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Audio::TerminateMidiRPC: Failed due to RPC exception");
+        }
+        RpcEndExcept;
     }
-    RpcEndExcept;
+
+    StopMidiRPCServerProcess();
+
+    if (m_RpcBindingString != NULL)
+    {
+        RpcStringFree(&m_RpcBindingString);
+        m_RpcBindingString = NULL;
+    }
+
+    m_bIsClientInitialized = false;
+    m_bIsServerInitialized = false;
+    m_bIsMidiRpcInitialized = false;
+}
+
+void Audio::StopMidiRPCServerProcess()
+{
+    const DWORD MIDI_RPC_SERVER_EXIT_TIMEOUT_MS = 2000;
+
+    HANDLE hProcess = static_cast<HANDLE>(m_hMidiRpcServerProcess);
+    if (hProcess != NULL)
+    {
+        // Give the server a chance to shut down gracefully after MidiRPC_StopServer(),
+        // but never leave it running (e.g. when the RPC call failed or it hung)
+        if (WaitForSingleObject(hProcess, MIDI_RPC_SERVER_EXIT_TIMEOUT_MS) != WAIT_OBJECT_0)
+        {
+            LOG_WARNING("MIDI RPC Server did not exit in time - terminating it");
+            TerminateProcess(hProcess, 0);
+            WaitForSingleObject(hProcess, MIDI_RPC_SERVER_EXIT_TIMEOUT_MS);
+        }
+
+        CloseHandle(hProcess);
+        m_hMidiRpcServerProcess = NULL;
+    }
+
+    if (m_hMidiRpcServerJob != NULL)
+    {
+        // With JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE this also kills anything still left in the job
+        CloseHandle(static_cast<HANDLE>(m_hMidiRpcServerJob));
+        m_hMidiRpcServerJob = NULL;
+    }
 }
 #endif //_WIN32

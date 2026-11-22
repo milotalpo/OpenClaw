@@ -47,8 +47,13 @@ private:
     bool IsRPCServerListening();
 
     void TerminateMidiRPC();
+    void StopMidiRPCServerProcess();
 
     //##### Members #####//
+    // Win32 HANDLEs of the MIDI RPC server process (MidiProc.exe) and of the job object
+    // which ties its lifetime to this process. Kept as void* so that <windows.h> is not needed here.
+    void* m_hMidiRpcServerProcess;
+    void* m_hMidiRpcServerJob;
     bool m_bIsServerInitialized;
     bool m_bIsClientInitialized;
     bool m_bIsMidiRpcInitialized;
