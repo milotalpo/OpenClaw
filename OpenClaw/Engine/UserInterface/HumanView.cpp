@@ -705,6 +705,7 @@ void HumanView::EnterMenuDelegate(IEventDataPtr pEventData)
     m_pScene.reset(new ScreenElementScene(g_pApp->GetRenderer()));
     m_pHUD.reset();
     m_pIngameMenu.reset();
+    m_pGameOverMenu.reset();
     m_pCamera->SetParent(nullptr);
 
     g_pApp->GetAudio()->StopAllSounds();
@@ -823,11 +824,11 @@ void HumanView::ClawDiedDelegate(IEventDataPtr pEventData)
         TiXmlElement* pXmlGameOverMenuRoot = XmlResourceLoader::LoadAndReturnRootXmlElement("GAME_OVER_MENU.XML");
         assert(pXmlGameOverMenuRoot != NULL);
 
-        shared_ptr<ScreenElementMenu> pGameOverMenu(new ScreenElementMenu(g_pApp->GetRenderer()));
-        DO_AND_CHECK(pGameOverMenu->Initialize(pXmlGameOverMenuRoot));
+        m_pGameOverMenu.reset(new ScreenElementMenu(g_pApp->GetRenderer()));
+        DO_AND_CHECK(m_pGameOverMenu->Initialize(pXmlGameOverMenuRoot));
 
-        m_ScreenElements.push_back(pGameOverMenu);
-        pGameOverMenu->VSetVisible(true);
+        m_ScreenElements.push_back(m_pGameOverMenu);
+        m_pGameOverMenu->VSetVisible(true);
 
         IEventMgr::Get()->VAbortAllEvents();
     }

@@ -1819,7 +1819,9 @@ bool BaseGameApp::IsGameplayInputActive()
         return false;
     }
 
-    return !pHumanView->IsIngameMenuVisible();
+    // Game over screen uses menu navigation too (A = Enter, B / Start = Escape),
+    // so it can always be dismissed regardless of the gameplay bindings
+    return !pHumanView->IsIngameMenuVisible() && !pHumanView->IsGameOverMenuVisible();
 }
 
 void BaseGameApp::OnGamepadInputChanged(GamepadInput input, bool pressed)

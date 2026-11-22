@@ -51,6 +51,7 @@ public:
 
     shared_ptr<Console> GetConsole() const { return m_pConsole; }
     bool IsIngameMenuVisible() const { return m_pIngameMenu && m_pIngameMenu->VIsVisible(); }
+    bool IsGameOverMenuVisible() const { return m_pGameOverMenu && m_pGameOverMenu->VIsVisible(); }
 
     void SetRendering(bool rendering) { m_bRendering = rendering; }
     bool IsRendering() { return m_bRendering; }
@@ -98,6 +99,7 @@ protected:
     shared_ptr<CameraNode> m_pCamera;
     shared_ptr<Console> m_pConsole;
     shared_ptr<ScreenElementMenu> m_pIngameMenu;
+    shared_ptr<ScreenElementMenu> m_pGameOverMenu;
 
     shared_ptr<IKeyboardHandler> m_pKeyboardHandler;
     shared_ptr<IPointerHandler> m_pPointerHandler;

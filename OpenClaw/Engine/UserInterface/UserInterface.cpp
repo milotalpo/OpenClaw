@@ -896,6 +896,23 @@ bool ScreenElementMenuPage::MoveToMenuItemIdx(int oldIdx, int idxIncrement, bool
         return false;
     }
 
+    // Pages without focusable items (e.g. the game over screen, which only has a text item)
+    // have nothing to move to. Leave the page untouched, otherwise the loop below never finds
+    // a button and the page would be left without any active item.
+    bool hasFocusableItem = false;
+    for (shared_ptr<ScreenElementMenuItem> pMenuItem : m_MenuItems)
+    {
+        if (pMenuItem->CanBeFocused())
+        {
+            hasFocusableItem = true;
+            break;
+        }
+    }
+    if (!hasFocusableItem)
+    {
+        return false;
+    }
+
     DeactivateAllMenuItems();
 
     // Moving up
