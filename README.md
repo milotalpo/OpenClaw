@@ -125,11 +125,97 @@ Zip all content inside `Build_Release/ASSETS` directory to `ASSETS.ZIP` file.
 # In-game images
   -  **TODO** - add screenshots
 
+# Controls
+
+### Keyboard
+
+  Default bindings (they can be remapped, see below):
+
+  | Action | Default key | Alternate controls |
+  |---|---|---|
+  | Move left / right | `Left` / `Right` | `A` / `D` |
+  | Up (climb, look up) / Down (climb down, duck) | `Up` / `Down` | `W` / `S` |
+  | Jump | `Space` | `Space` |
+  | Attack (sword) | `Left Ctrl` | `Left Ctrl` |
+  | Fire (pistol / magic / dynamite) | `Left Alt` | `Left Alt` |
+  | Change weapon | `Left Shift` | `E` |
+  | Pause / menu | `Escape` (fixed) | `Escape` (fixed) |
+
+### Xbox controller (XInput compatible gamepads)
+
+  The game supports Xbox and any other XInput / SDL GameController compatible gamepad. Controllers are detected automatically and can be connected or disconnected (hot-plug) while the game is running.
+
+  | Action | Default button |
+  |---|---|
+  | Move left / right / up / down | D-Pad (the **left stick** always works as a D-Pad too) |
+  | Jump | `A` |
+  | Attack | `X` |
+  | Fire | `B` |
+  | Change weapon | `Y` |
+  | Pause / menu | `Start` |
+
+  In menus (main menu, in-game menu, score screens) the controller uses a fixed navigation layout: D-Pad / left stick = arrows, `A` = confirm, `B` / `Back` / `Start` = back.
+
+  Every gameplay action except keyboard Pause can be bound to any of `A`, `B`, `X`, `Y`, `LB`, `RB`, `LT`, `RT`, D-Pad, `Start`, `Back`, stick clicks or the Xbox button. Triggers count as pressed above a configurable threshold.
+
+### Remapping controls
+
+  Bindings are stored in `config.xml` under `<ControlOptions>` and are easiest to change from the **Controls** tab in `ClawLauncher.exe` (see [Claw Launcher](#claw-launcher)). They can also be edited by hand:
+
+  ```xml
+  <ControlOptions>
+    <UseAlternateControls>false</UseAlternateControls>
+    <!-- SDL key names: Left, Right, Space, Left Ctrl, Left Alt, Left Shift, A..Z, ... -->
+    <KeyBindings>
+      <MoveLeft>Left</MoveLeft>
+      <MoveRight>Right</MoveRight>
+      <Up>Up</Up>
+      <Down>Down</Down>
+      <Jump>Space</Jump>
+      <Attack>Left Ctrl</Attack>
+      <Fire>Left Alt</Fire>
+      <ChangeAmmo>Left Shift</ChangeAmmo>
+    </KeyBindings>
+    <Controller>
+      <Enable>true</Enable>
+      <StickDeadzone>16056</StickDeadzone>       <!-- 0..32767 -->
+      <TriggerThreshold>8000</TriggerThreshold>  <!-- 0..32767 -->
+      <!-- a b x y leftshoulder rightshoulder lefttrigger righttrigger
+           dpup dpdown dpleft dpright start back leftstick rightstick guide none -->
+      <Bindings>
+        <MoveLeft>dpleft</MoveLeft>
+        <MoveRight>dpright</MoveRight>
+        <Up>dpup</Up>
+        <Down>dpdown</Down>
+        <Jump>a</Jump>
+        <Attack>x</Attack>
+        <Fire>b</Fire>
+        <ChangeAmmo>y</ChangeAmmo>
+        <Pause>start</Pause>
+      </Bindings>
+    </Controller>
+  </ControlOptions>
+  ```
+
+  - Missing entries fall back to the defaults (which depend on `UseAlternateControls`); unknown key names are ignored and logged as a warning
+  - The keyboard Pause key is always `Escape` and cannot be remapped
+  - Set `<Controller><Enable>` to `false` to disable gamepad support completely
+
 # Claw Launcher
 
   - Precompiled for Windows natively and for Linux use through Mono runtime
   - Locates Claw binary and corresponding config.xml file
-  - Provides GUI to modify configuration (Video/Audio/Assets)
+  - Provides GUI to modify configuration (Video/Audio/Assets/Controls)
+
+### Controls tab
+
+  The **Controls** tab lets you remap keyboard and Xbox controller bindings without editing `config.xml`:
+
+  - **Keyboard column** - click the button next to an action, then press the new key. Press `Escape` to cancel
+  - **Xbox controller column** - pick a button for each action from the drop-down list (`(none)` leaves the action unbound on the controller)
+  - **Options** - toggle *Alternate controls*, enable/disable the controller and set the left stick deadzone (in %)
+  - **Reset defaults** - restores the default bindings (taking *Alternate controls* into account)
+  - **Apply Changes** - writes the bindings to `config.xml`. If two actions share the same key or button, a warning listing the conflicts is shown (the changes are saved anyway)
 
 ### For Linux
 
