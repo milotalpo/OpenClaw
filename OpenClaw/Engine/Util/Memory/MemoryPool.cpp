@@ -143,22 +143,32 @@ bool MemoryPool::GrowMemoryArray(void)
     LOG(str.c_str());  // the logger is not initialized during many of the initial memory pool growths, so let's just use the OS version
 #endif
 
+    const size_t oldArraySize = m_memArraySize;
+
+    // allocate a new block of memory first, so that a failed allocation leaves the pool untouched
+    // (previously a NULL block was linked into the free list and handed out later)
+    unsigned char* pNewBlock = AllocateNewMemoryBlock();
+    if (!pNewBlock)
+        return false;
+
     // allocate a new array
-    size_t allocationSize = sizeof(unsigned char*) * (m_memArraySize + 1);
+    size_t allocationSize = sizeof(unsigned char*) * (oldArraySize + 1);
     unsigned char** ppNewMemArray = (unsigned char**)malloc(allocationSize);
 
     // make sure the allocation succeeded
     if (!ppNewMemArray)
+    {
+        free(pNewBlock);
         return false;
+    }
 
     // copy any existing memory pointers over
-    for (unsigned int i = 0; i < m_memArraySize; ++i)
+    for (size_t i = 0; i < oldArraySize; ++i)
     {
         ppNewMemArray[i] = m_ppRawMemoryArray[i];
     }
 
-    // allocate a new block of memory
-    ppNewMemArray[m_memArraySize] = AllocateNewMemoryBlock();  // indexing m_memArraySize here is safe because we haven't incremented it yet to reflect the new size    
+    ppNewMemArray[oldArraySize] = pNewBlock;
 
     // attach the block to the end of the current memory list
     if (m_pHead)
@@ -170,11 +180,11 @@ bool MemoryPool::GrowMemoryArray(void)
             pCurr = pNext;
             pNext = GetNext(pNext);
         }
-        SetNext(pCurr, ppNewMemArray[m_memArraySize]);
+        SetNext(pCurr, pNewBlock);
     }
     else
     {
-        m_pHead = ppNewMemArray[m_memArraySize];
+        m_pHead = pNewBlock;
     }
 
     // destroy the old memory array

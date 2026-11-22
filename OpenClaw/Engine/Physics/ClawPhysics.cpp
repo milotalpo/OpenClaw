@@ -536,16 +536,16 @@ void ClawPhysics::VAddStaticGeometry(const Point& position, const Point& size, C
         bodyDef.fixedRotation = true;
         b2Body* pBody = m_pWorld->CreateBody(&bodyDef);
 
-        b2PolygonShape bodyShape;
-        bodyShape.SetAsBox(b2Size.x / 2, b2Size.y / 2);
+        b2PolygonShape groundShape;
+        groundShape.SetAsBox(b2Size.x / 2, b2Size.y / 2);
 
-        b2FixtureDef fixtureDef;
-        fixtureDef.shape = &bodyShape;
-        fixtureDef.friction = 0.18f;
-        fixtureDef.filter.categoryBits = CollisionFlag_Ground;
-        fixtureDef.userData = (void*)fixtureType;
-        fixtureDef.isSensor = false;
-        pBody->CreateFixture(&fixtureDef);
+        b2FixtureDef groundFixtureDef;
+        groundFixtureDef.shape = &groundShape;
+        groundFixtureDef.friction = 0.18f;
+        groundFixtureDef.filter.categoryBits = CollisionFlag_Ground;
+        groundFixtureDef.userData = (void*)fixtureType;
+        groundFixtureDef.isSensor = false;
+        pBody->CreateFixture(&groundFixtureDef);
     }
     else
     {

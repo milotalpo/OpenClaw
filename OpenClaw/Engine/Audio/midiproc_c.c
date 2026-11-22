@@ -98,13 +98,15 @@ static RPC_BINDING_HANDLE MidiRPC__MIDL_AutoBindHandle;
 // Memory allocation function for RPC.
 // The runtime uses these two functions for allocating/deallocating
 // enough memory to pass the string to the server.
-void* __RPC_USER midl_user_allocate(size_t size)
+_Must_inspect_result_
+_Ret_maybenull_ _Post_writable_byte_size_(size)
+void* __RPC_USER midl_user_allocate(_In_ size_t size)
 {
     return malloc(size);
 }
 
 // Memory deallocation function for RPC.
-void __RPC_USER midl_user_free(void* p)
+void __RPC_USER midl_user_free(_Pre_maybenull_ _Post_invalid_ void* p)
 {
     free(p);
 }

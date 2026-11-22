@@ -127,8 +127,8 @@ void EnemyAIComponent::VUpdate(uint32 msDiff)
                 SDL_Rect cameraRect = pCamera->GetCameraRect();
                 if (!SDL_HasIntersection(&renderRect, &cameraRect))
                 {
-                    shared_ptr<EventData_Destroy_Actor> pEvent(new EventData_Destroy_Actor(m_pOwner->GetGUID()));
-                    IEventMgr::Get()->VQueueEvent(pEvent);
+                    shared_ptr<EventData_Destroy_Actor> pDestroyEvent(new EventData_Destroy_Actor(m_pOwner->GetGUID()));
+                    IEventMgr::Get()->VQueueEvent(pDestroyEvent);
 
                     // This is really weird... but it is in original game exactly like this
                     SoundInfo splashSound("/GAME/SOUNDS/SPLASH.WAV");

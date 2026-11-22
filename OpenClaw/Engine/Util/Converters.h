@@ -521,8 +521,6 @@ inline TiXmlElement* WwdObjectToXml(WwdObject* wwdObject, std::string& imagesRoo
             return NULL;
         }
 
-        std::string logic = wwdObject->logic;
-
         Point speed(0, 0);
         bool hasHorizontalMovement = false;
         bool hasVerticalMovement = false;
@@ -582,9 +580,6 @@ inline TiXmlElement* WwdObjectToXml(WwdObject* wwdObject, std::string& imagesRoo
         {
             return NULL;
         }
-
-        std::string logic = wwdObject->logic;
-        std::string imageSet = wwdObject->imageSet;
 
         TogglePegDef togglePegDef;
 

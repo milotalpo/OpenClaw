@@ -17,20 +17,20 @@ namespace Logger
 #define LOG_ERROR(str) \
 do \
 { \
-    std::string s((str)); \
-    std::string out; \
-    Logger::GetOutputString(out, "", s, __FUNCTION__, NULL, __LINE__); \
-    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "%s", out.c_str()); \
+    std::string logMacroMessage_((str)); \
+    std::string logMacroOutput_; \
+    Logger::GetOutputString(logMacroOutput_, "", logMacroMessage_, __FUNCTION__, NULL, __LINE__); \
+    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "%s", logMacroOutput_.c_str()); \
 } \
 while (0); \
 
 #define LOG_ASSERT(str) \
 do \
 { \
-    std::string s((str)); \
-    std::string out; \
-    Logger::GetOutputString(out, "", s, __FUNCTION__, NULL, __LINE__); \
-    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "%s", out.c_str()); \
+    std::string logMacroMessage_((str)); \
+    std::string logMacroOutput_; \
+    Logger::GetOutputString(logMacroOutput_, "", logMacroMessage_, __FUNCTION__, NULL, __LINE__); \
+    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "%s", logMacroOutput_.c_str()); \
     assert(false); \
 } \
 while (0); \
@@ -40,40 +40,40 @@ while (0); \
 #define LOG_WARNING(str) \
 do \
 { \
-    std::string s((str)); \
-    std::string out; \
-    Logger::GetOutputString(out, std::string(""), s, __FUNCTION__, NULL, __LINE__); \
-    SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "%s", out.c_str()); \
+    std::string logMacroMessage_((str)); \
+    std::string logMacroOutput_; \
+    Logger::GetOutputString(logMacroOutput_, std::string(""), logMacroMessage_, __FUNCTION__, NULL, __LINE__); \
+    SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "%s", logMacroOutput_.c_str()); \
 } \
 while (0);\
 
 #define LOG_TAG(tag, str) \
 do \
 { \
-    std::string s((str)); \
-    std::string out; \
-    Logger::GetOutputString(out, tag, s, NULL, NULL, 0); \
-    SDL_Log("%s", out.c_str()); \
+    std::string logMacroMessage_((str)); \
+    std::string logMacroOutput_; \
+    Logger::GetOutputString(logMacroOutput_, tag, logMacroMessage_, NULL, NULL, 0); \
+    SDL_Log("%s", logMacroOutput_.c_str()); \
 } \
     while (0);\
 
 #define LOG(str) \
 do \
 { \
-    std::string s((str)); \
-    std::string out; \
-    Logger::GetOutputString(out, "", s, NULL, NULL, 0); \
-    SDL_Log("%s", out.c_str()); \
+    std::string logMacroMessage_((str)); \
+    std::string logMacroOutput_; \
+    Logger::GetOutputString(logMacroOutput_, "", logMacroMessage_, NULL, NULL, 0); \
+    SDL_Log("%s", logMacroOutput_.c_str()); \
 } \
 while (0);\
 
 #define LOG_TRACE(str) \
 do \
 { \
-    std::string s((str)); \
-    std::string out; \
-    Logger::GetOutputString(out, "", s, __FUNCTION__, NULL, __LINE__); \
-    SDL_Log("%s", out.c_str()); \
+    std::string logMacroMessage_((str)); \
+    std::string logMacroOutput_; \
+    Logger::GetOutputString(logMacroOutput_, "", logMacroMessage_, __FUNCTION__, NULL, __LINE__); \
+    SDL_Log("%s", logMacroOutput_.c_str()); \
 } \
 while (0); \
 
